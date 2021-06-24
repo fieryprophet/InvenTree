@@ -1,20 +1,46 @@
 {% extends "label/label_base.html" %}
 
 {% load barcode %}
+{% load static %}
 
 {% block style %}
 
-.qr {
-    position: fixed;
-    left: 0mm;
-    top: 0mm;
-    height: {{ height }}mm;
+strong {
+    font-size: 10px;
+}
+
+td.logo {
+    padding: 0;
+    text-align: center;
+    width: 35.5mm;
+}
+
+img.logo {
+    width: 28mm;
+}
+
+td.qr {
+    padding: 0;
     width: {{ height }}mm;
+}
+
+img.qr {
+    margin-top: -1.1mm;
+    height: 18mm;
+    width: 18mm;
 }
 
 {% endblock %}
 
 {% block content %}
-
-<img class='qr' src='{% qrcode qr_data %}'>
+    <table cellpadding='0' cellspacing='0'>
+        <td class='logo'>
+            <img class='logo' src='{% static "img/medshift.png" %}'/>
+            <br/>
+            <strong>{{ part.name }}</strong>
+        </td>
+        <td class='qr'>
+            <img class='qr' src='{% qrcode qr_data %}'>
+        </td>
+    </table>
 {% endblock %}

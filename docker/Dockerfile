@@ -1,7 +1,7 @@
 FROM python:alpine as base
 
 # GitHub source
-ARG repository="https://github.com/inventree/InvenTree.git"
+ARG repository="https://github.com/MedShift/InvenTree.git"
 ARG branch="master"
 
 ENV PYTHONUNBUFFERED 1
@@ -33,8 +33,8 @@ ENV INVENTREE_WEB_PORT="8000"
 LABEL org.label-schema.schema-version="1.0" \
       org.label-schema.build-date=${DATE} \
       org.label-schema.vendor="inventree" \
-      org.label-schema.name="inventree/inventree" \
-      org.label-schema.url="https://hub.docker.com/r/inventree/inventree" \
+      org.label-schema.name="medshift/inventree" \
+      org.label-schema.url="https://ghcr.io/medshift/inventree" \
       org.label-schema.version=${INVENTREE_VERSION} \
       org.label-schema.vcs-url=${INVENTREE_REPO} \
       org.label-schema.vcs-branch=${BRANCH} \
