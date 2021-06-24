@@ -38,7 +38,7 @@ services:
     # Uses gunicorn as the web server
     inventree-server:
         container_name: inventree-server
-        image: inventree/inventree:latest
+        image: medshift/inventree:latest
         expose:
             - 8000
         depends_on:
@@ -61,7 +61,7 @@ services:
     # Background worker process handles long-running or periodic tasks
     inventree-worker:
         container_name: inventree-worker
-        image: inventree/inventree:latest
+        image: medshift/inventree:latest
         entrypoint: ./start_prod_worker.sh
         depends_on:
             - inventree-db
