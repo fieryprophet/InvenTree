@@ -32,9 +32,9 @@ ENV INVENTREE_WEB_PORT="8000"
 
 LABEL org.label-schema.schema-version="1.0" \
       org.label-schema.build-date=${DATE} \
-      org.label-schema.vendor="inventree" \
+      org.label-schema.vendor="medshift" \
       org.label-schema.name="medshift/inventree" \
-      org.label-schema.url="https://ghcr.io/medshift/inventree" \
+      org.label-schema.url="https://github.com/medshift/inventree" \
       org.label-schema.version=${INVENTREE_VERSION} \
       org.label-schema.vcs-url=${INVENTREE_REPO} \
       org.label-schema.vcs-branch=${BRANCH} \
