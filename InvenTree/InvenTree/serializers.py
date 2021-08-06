@@ -5,16 +5,58 @@ Serializers used in various InvenTree apps
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+
 import os
+
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.translation import ugettext_lazy as _
+
+from djmoney.contrib.django_rest_framework.fields import MoneyField
+from djmoney.money import Money
+from djmoney.utils import MONEY_CLASSES, get_currency_field_name
 
 from rest_framework import serializers
 from rest_framework.utils import model_meta
 from rest_framework.fields import empty
 from rest_framework.exceptions import ValidationError
+from rest_framework.serializers import DecimalField
+
+
+class InvenTreeMoneySerializer(MoneyField):
+    """
+    Custom serializer for 'MoneyField',
+    which ensures that passed values are numerically valid
+
+    Ref: https://github.com/django-money/django-money/blob/master/djmoney/contrib/django_rest_framework/fields.py
+    """
+
+    def get_value(self, data):
+        """
+        Test that the returned amount is a valid Decimal
+        """
+
+        amount = super(DecimalField, self).get_value(data)
+
+        # Convert an empty string to None
+        if len(str(amount).strip()) == 0:
+            amount = None
+
+        try:
+            if amount is not None:
+                amount = Decimal(amount)
+        except:
+            raise ValidationError(_("Must be a valid number"))
+
+        currency = data.get(get_currency_field_name(self.field_name), self.default_currency)
+
+        if currency and amount is not None and not isinstance(amount, MONEY_CLASSES) and amount is not empty:
+            return Money(amount, currency)
+        
+        return amount
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -43,8 +85,10 @@ class InvenTreeModelSerializer(serializers.ModelSerializer):
     """
 
     def __init__(self, instance=None, data=empty, **kwargs):
-
-        # self.instance = instance
+        """
+        Custom __init__ routine to ensure that *default* values (as specified in the ORM)
+        are used by the DRF serializers, *if* the values are not provided by the user.
+        """
 
         # If instance is None, we are creating a new instance
         if instance is None and data is not empty:
@@ -110,6 +154,19 @@ class InvenTreeModelSerializer(serializers.ModelSerializer):
 
         return initials
 
+    def save(self, **kwargs):
+        """
+        Catch any django ValidationError thrown at the moment save() is called,
+        and re-throw as a DRF ValidationError
+        """
+
+        try:
+            super().save(**kwargs)
+        except (ValidationError, DjangoValidationError) as exc:
+            raise ValidationError(detail=serializers.as_serializer_error(exc))
+
+        return self.instance
+
     def run_validation(self, data=empty):
         """
         Perform serializer validation.
@@ -138,7 +195,15 @@ class InvenTreeModelSerializer(serializers.ModelSerializer):
         try:
             instance.full_clean()
         except (ValidationError, DjangoValidationError) as exc:
-            raise ValidationError(detail=serializers.as_serializer_error(exc))
+
+            data = exc.message_dict
+
+            # Change '__all__' key (django style) to 'non_field_errors' (DRF style)
+            if '__all__' in data:
+                data['non_field_errors'] = data['__all__']
+                del data['__all__']
+
+            raise ValidationError(data)
 
         return data
 

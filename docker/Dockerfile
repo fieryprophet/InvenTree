@@ -1,4 +1,4 @@
-FROM python:alpine as base
+FROM alpine:3.13 as base
 
 # GitHub source
 ARG repository="https://github.com/MedShift/InvenTree.git"
@@ -26,6 +26,10 @@ ENV INVENTREE_MEDIA_ROOT="${INVENTREE_DATA_DIR}/media"
 
 ENV INVENTREE_CONFIG_FILE="${INVENTREE_DATA_DIR}/config.yaml"
 ENV INVENTREE_SECRET_KEY_FILE="${INVENTREE_DATA_DIR}/secret_key.txt"
+
+# Worker configuration (can be altered by user)
+ENV INVENTREE_GUNICORN_WORKERS="4"
+ENV INVENTREE_BACKGROUND_WORKERS="4"
 
 # Default web server port is 8000
 ENV INVENTREE_WEB_PORT="8000"
@@ -57,7 +61,7 @@ RUN apk add --no-cache cairo cairo-dev pango pango-dev
 RUN apk add --no-cache fontconfig ttf-droid ttf-liberation ttf-dejavu ttf-opensans ttf-ubuntu-font-family font-croscore font-noto
 
 # Python
-RUN apk add --no-cache python3 python3-dev
+RUN apk add --no-cache python3 python3-dev py3-pip
 
 # SQLite support
 RUN apk add --no-cache sqlite

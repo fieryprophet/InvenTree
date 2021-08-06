@@ -71,29 +71,6 @@ class StockItemSerializer(InvenTreeModelSerializer):
     """
 
     @staticmethod
-    def prefetch_queryset(queryset):
-        """
-        Prefetch related database tables,
-        to reduce database hits.
-        """
-
-        return queryset.prefetch_related(
-            'belongs_to',
-            'build',
-            'customer',
-            'purchase_order',
-            'sales_order',
-            'supplier_part',
-            'supplier_part__supplier',
-            'supplier_part__manufacturer_part__manufacturer',
-            'allocations',
-            'sales_order_allocations',
-            'location',
-            'part',
-            'tracking_info',
-        )
-
-    @staticmethod
     def annotate_queryset(queryset):
         """
         Add some extra annotations to the queryset,
@@ -260,12 +237,15 @@ class LocationSerializer(InvenTreeModelSerializer):
 
     items = serializers.IntegerField(source='item_count', read_only=True)
 
+    level = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = StockLocation
         fields = [
             'pk',
             'url',
             'name',
+            'level',
             'description',
             'parent',
             'pathstring',
@@ -287,6 +267,8 @@ class StockItemAttachmentSerializer(InvenTreeModelSerializer):
     user_detail = UserSerializerBrief(source='user', read_only=True)
 
     attachment = InvenTreeAttachmentSerializerField(required=True)
+
+    # TODO: Record the uploading user when creating or updating an attachment!
 
     class Meta:
         model = StockItemAttachment

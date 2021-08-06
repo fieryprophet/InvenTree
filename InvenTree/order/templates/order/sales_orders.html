@@ -67,7 +67,7 @@
             {
                 success: function(response) {
 
-                    var prefix = '{% settings_value "SALESORDER_REFERENCE_PREFIX" %}';
+                    var prefix = global_settings.SALESORDER_REFERENCE_PREFIX;
 
                     for (var idx = 0; idx < response.length; idx++) {
                         var order = response[idx];
@@ -178,19 +178,7 @@ $("#order-print").click(function() {
 })
 
 $("#so-create").click(function() {
-    launchModalForm("{% url 'so-create' %}",
-        {
-            follow: true,
-            secondary: [
-                {
-                    field: 'customer',
-                    label: '{% trans "New Customer" %}',
-                    title: '{% trans "Create new Customer" %}',
-                    url: '{% url "customer-create" %}',
-                }
-            ]
-        }
-    );
+    createSalesOrder();
 });
 
 {% endblock %}

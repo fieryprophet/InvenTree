@@ -66,7 +66,7 @@
             },
             {
                 success: function(response) {
-                    var prefix = '{% settings_value "PURCHASEORDER_REFERENCE_PREFIX" %}';
+                    var prefix = global_settings.PURCHASEORDER_REFERENCE_PREFIX;
 
                     for (var idx = 0; idx < response.length; idx++) {
 
@@ -176,19 +176,7 @@ $("#order-print").click(function() {
 })
 
 $("#po-create").click(function() {
-    launchModalForm("{% url 'po-create' %}",
-        {
-            follow: true,
-            secondary: [
-                {
-                    field: 'supplier',
-                    label: '{% trans "New Supplier" %}',
-                    title: '{% trans "Create new Supplier" %}',
-                    url: '{% url "supplier-create" %}',
-                }
-            ]
-        }
-    );
+    createPurchaseOrder();
 });
 
 loadPurchaseOrderTable("#purchase-order-table", {

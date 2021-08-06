@@ -4,6 +4,7 @@ JSON serializers for Part app
 import imghdr
 from decimal import Decimal
 
+from django.urls import reverse_lazy
 from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Coalesce
@@ -31,6 +32,8 @@ class CategorySerializer(InvenTreeModelSerializer):
 
     parts = serializers.IntegerField(source='item_count', read_only=True)
 
+    level = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = PartCategory
         fields = [
@@ -38,10 +41,12 @@ class CategorySerializer(InvenTreeModelSerializer):
             'name',
             'description',
             'default_location',
-            'pathstring',
-            'url',
+            'default_keywords',
+            'level',
             'parent',
             'parts',
+            'pathstring',
+            'url',
         ]
 
 
@@ -59,7 +64,12 @@ class PartAttachmentSerializer(InvenTreeModelSerializer):
             'pk',
             'part',
             'attachment',
-            'comment'
+            'comment',
+            'upload_date',
+        ]
+
+        read_only_fields = [
+            'upload_date',
         ]
 
 
@@ -187,6 +197,9 @@ class PartSerializer(InvenTreeModelSerializer):
     Used when displaying all details of a single component.
     """
 
+    def get_api_url(self):
+        return reverse_lazy('api-part-list')
+
     def __init__(self, *args, **kwargs):
         """
         Custom initialization method for PartSerializer,
@@ -201,25 +214,6 @@ class PartSerializer(InvenTreeModelSerializer):
 
         if category_detail is not True:
             self.fields.pop('category_detail')
-
-    @staticmethod
-    def prefetch_queryset(queryset):
-        """
-        Prefetch related database tables,
-        to reduce database hits.
-        """
-
-        return queryset.prefetch_related(
-            'category',
-            'category__parts',
-            'category__parent',
-            'stock_items',
-            'bom_items',
-            'builds',
-            'supplier_parts',
-            'supplier_parts__purchase_order_line_items',
-            'supplier_parts__purchase_order_line_items__order',
-        )
 
     @staticmethod
     def annotate_queryset(queryset):
@@ -326,9 +320,10 @@ class PartSerializer(InvenTreeModelSerializer):
             'category',
             'category_detail',
             'component',
-            'description',
-            'default_location',
             'default_expiry',
+            'default_location',
+            'default_supplier',
+            'description',
             'full_name',
             'image',
             'in_stock',
@@ -497,19 +492,6 @@ class BomItemSerializer(InvenTreeModelSerializer):
         ]
 
 
-class PartParameterSerializer(InvenTreeModelSerializer):
-    """ JSON serializers for the PartParameter model """
-
-    class Meta:
-        model = PartParameter
-        fields = [
-            'pk',
-            'part',
-            'template',
-            'data'
-        ]
-
-
 class PartParameterTemplateSerializer(InvenTreeModelSerializer):
     """ JSON serializer for the PartParameterTemplate model """
 
@@ -522,17 +504,36 @@ class PartParameterTemplateSerializer(InvenTreeModelSerializer):
         ]
 
 
+class PartParameterSerializer(InvenTreeModelSerializer):
+    """ JSON serializers for the PartParameter model """
+
+    template_detail = PartParameterTemplateSerializer(source='template', many=False, read_only=True)
+
+    class Meta:
+        model = PartParameter
+        fields = [
+            'pk',
+            'part',
+            'template',
+            'template_detail',
+            'data'
+        ]
+
+
 class CategoryParameterTemplateSerializer(InvenTreeModelSerializer):
     """ Serializer for PartCategoryParameterTemplate """
 
     parameter_template = PartParameterTemplateSerializer(many=False,
                                                          read_only=True)
 
+    category_detail = CategorySerializer(source='category', many=False, read_only=True)
+
     class Meta:
         model = PartCategoryParameterTemplate
         fields = [
             'pk',
             'category',
+            'category_detail',
             'parameter_template',
             'default_value',
         ]
