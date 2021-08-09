@@ -11,16 +11,16 @@ import decimal
 import math
 
 from django.db import models, transaction
+from django.contrib.auth.models import User
 from django.db.utils import IntegrityError, OperationalError
 from django.conf import settings
 
-from djmoney.models.fields import MoneyField
+from djmoney.settings import CURRENCY_CHOICES
 from djmoney.contrib.exchange.models import convert_money
 from djmoney.contrib.exchange.exceptions import MissingRate
 
-from common.settings import currency_code_default
-
 from django.utils.translation import ugettext_lazy as _
+from django.utils.html import format_html
 from django.core.validators import MinValueValidator, URLValidator
 from django.core.exceptions import ValidationError
 
@@ -28,313 +28,78 @@ import InvenTree.helpers
 import InvenTree.fields
 
 
-class InvenTreeSetting(models.Model):
+class BaseInvenTreeSetting(models.Model):
     """
-    An InvenTreeSetting object is a key:value pair used for storing
+    An base InvenTreeSetting object is a key:value pair used for storing
     single values (e.g. one-off settings values).
-
-    The class provides a way of retrieving the value for a particular key,
-    even if that key does not exist.
     """
 
-    """
-    Dict of all global settings values:
-
-    The key of each item is the name of the value as it appears in the database.
-
-    Each global setting has the following parameters:
-
-    - name: Translatable string name of the setting (required)
-    - description: Translatable string description of the setting (required)
-    - default: Default value (optional)
-    - units: Units of the particular setting (optional)
-    - validator: Validation function for the setting (optional)
-
-    The keys must be upper-case
-    """
-
-    GLOBAL_SETTINGS = {
-
-        'INVENTREE_INSTANCE': {
-            'name': _('InvenTree Instance Name'),
-            'default': 'InvenTree server',
-            'description': _('String descriptor for the server instance'),
-        },
-
-        'INVENTREE_INSTANCE_TITLE': {
-            'name': _('Use instance name'),
-            'description': _('Use the instance name in the title-bar'),
-            'validator': bool,
-            'default': False,
-        },
-
-        'INVENTREE_COMPANY_NAME': {
-            'name': _('Company name'),
-            'description': _('Internal company name'),
-            'default': 'My company name',
-        },
-
-        'INVENTREE_BASE_URL': {
-            'name': _('Base URL'),
-            'description': _('Base URL for server instance'),
-            'validator': URLValidator(),
-            'default': '',
-        },
-
-        'INVENTREE_DOWNLOAD_FROM_URL': {
-            'name': _('Download from URL'),
-            'description': _('Allow download of remote images and files from external URL'),
-            'validator': bool,
-            'default': False,
-        },
-
-        'BARCODE_ENABLE': {
-            'name': _('Barcode Support'),
-            'description': _('Enable barcode scanner support'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'PART_IPN_REGEX': {
-            'name': _('IPN Regex'),
-            'description': _('Regular expression pattern for matching Part IPN')
-        },
-
-        'PART_ALLOW_DUPLICATE_IPN': {
-            'name': _('Allow Duplicate IPN'),
-            'description': _('Allow multiple parts to share the same IPN'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'PART_ALLOW_EDIT_IPN': {
-            'name': _('Allow Editing IPN'),
-            'description': _('Allow changing the IPN value while editing a part'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'PART_COPY_BOM': {
-            'name': _('Copy Part BOM Data'),
-            'description': _('Copy BOM data by default when duplicating a part'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'PART_COPY_PARAMETERS': {
-            'name': _('Copy Part Parameter Data'),
-            'description': _('Copy parameter data by default when duplicating a part'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'PART_COPY_TESTS': {
-            'name': _('Copy Part Test Data'),
-            'description': _('Copy test data by default when duplicating a part'),
-            'default': True,
-            'validator': bool
-        },
-
-        'PART_CATEGORY_PARAMETERS': {
-            'name': _('Copy Category Parameter Templates'),
-            'description': _('Copy category parameter templates when creating a part'),
-            'default': True,
-            'validator': bool
-        },
-
-        'PART_RECENT_COUNT': {
-            'name': _('Recent Part Count'),
-            'description': _('Number of recent parts to display on index page'),
-            'default': 10,
-            'validator': [int, MinValueValidator(1)]
-        },
-
-        'PART_TEMPLATE': {
-            'name': _('Template'),
-            'description': _('Parts are templates by default'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'PART_ASSEMBLY': {
-            'name': _('Assembly'),
-            'description': _('Parts can be assembled from other components by default'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'PART_COMPONENT': {
-            'name': _('Component'),
-            'description': _('Parts can be used as sub-components by default'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'PART_PURCHASEABLE': {
-            'name': _('Purchaseable'),
-            'description': _('Parts are purchaseable by default'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'PART_SALABLE': {
-            'name': _('Salable'),
-            'description': _('Parts are salable by default'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'PART_TRACKABLE': {
-            'name': _('Trackable'),
-            'description': _('Parts are trackable by default'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'PART_VIRTUAL': {
-            'name': _('Virtual'),
-            'description': _('Parts are virtual by default'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'PART_SHOW_QUANTITY_IN_FORMS': {
-            'name': _('Show Quantity in Forms'),
-            'description': _('Display available part quantity in some forms'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'PART_SHOW_IMPORT': {
-            'name': _('Show Import in Views'),
-            'description': _('Display the import wizard in some part views'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'PART_SHOW_PRICE_IN_FORMS': {
-            'name': _('Show Price in Forms'),
-            'description': _('Display part price in some forms'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'PART_INTERNAL_PRICE': {
-            'name': _('Internal Prices'),
-            'description': _('Enable internal prices for parts'),
-            'default': False,
-            'validator': bool
-        },
-
-        'PART_BOM_USE_INTERNAL_PRICE': {
-            'name': _('Internal Price as BOM-Price'),
-            'description': _('Use the internal price (if set) in BOM-price calculations'),
-            'default': False,
-            'validator': bool
-        },
-
-        'REPORT_DEBUG_MODE': {
-            'name': _('Debug Mode'),
-            'description': _('Generate reports in debug mode (HTML output)'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'REPORT_DEFAULT_PAGE_SIZE': {
-            'name': _('Page Size'),
-            'description': _('Default page size for PDF reports'),
-            'default': 'A4',
-            'choices': [
-                ('A4', 'A4'),
-                ('Legal', 'Legal'),
-                ('Letter', 'Letter')
-            ],
-        },
-
-        'REPORT_ENABLE_TEST_REPORT': {
-            'name': _('Test Reports'),
-            'description': _('Enable generation of test reports'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'STOCK_ENABLE_EXPIRY': {
-            'name': _('Stock Expiry'),
-            'description': _('Enable stock expiry functionality'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'STOCK_ALLOW_EXPIRED_SALE': {
-            'name': _('Sell Expired Stock'),
-            'description': _('Allow sale of expired stock'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'STOCK_STALE_DAYS': {
-            'name': _('Stock Stale Time'),
-            'description': _('Number of days stock items are considered stale before expiring'),
-            'default': 0,
-            'units': _('days'),
-            'validator': [int],
-        },
-
-        'STOCK_ALLOW_EXPIRED_BUILD': {
-            'name': _('Build Expired Stock'),
-            'description': _('Allow building with expired stock'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'STOCK_OWNERSHIP_CONTROL': {
-            'name': _('Stock Ownership Control'),
-            'description': _('Enable ownership control over stock locations and items'),
-            'default': False,
-            'validator': bool,
-        },
-
-        'STOCK_GROUP_BY_PART': {
-            'name': _('Group by Part'),
-            'description': _('Group stock items by part reference in table views'),
-            'default': True,
-            'validator': bool,
-        },
-
-        'STOCK_RECENT_COUNT': {
-            'name': _('Recent Stock Count'),
-            'description': _('Number of recent stock items to display on index page'),
-            'default': 10,
-            'validator': [int, MinValueValidator(1)]
-        },
-
-        'BUILDORDER_REFERENCE_PREFIX': {
-            'name': _('Build Order Reference Prefix'),
-            'description': _('Prefix value for build order reference'),
-            'default': 'BO',
-        },
-
-        'BUILDORDER_REFERENCE_REGEX': {
-            'name': _('Build Order Reference Regex'),
-            'description': _('Regular expression pattern for matching build order reference')
-        },
-
-        'SALESORDER_REFERENCE_PREFIX': {
-            'name': _('Sales Order Reference Prefix'),
-            'description': _('Prefix value for sales order reference'),
-            'default': 'SO',
-        },
-
-        'PURCHASEORDER_REFERENCE_PREFIX': {
-            'name': _('Purchase Order Reference Prefix'),
-            'description': _('Prefix value for purchase order reference'),
-            'default': 'PO',
-        },
-    }
+    GLOBAL_SETTINGS = {}
 
     class Meta:
-        verbose_name = "InvenTree Setting"
-        verbose_name_plural = "InvenTree Settings"
+        abstract = True
+
+    @classmethod
+    def allValues(cls, user=None):
+        """
+        Return a dict of "all" defined global settings.
+
+        This performs a single database lookup,
+        and then any settings which are not *in* the database
+        are assigned their default values
+        """
+
+        keys = set()
+        settings = []
+
+        results = cls.objects.all()
+
+        if user is not None:
+            results = results.filter(user=user)
+
+        # Query the database
+        for setting in results:
+            if setting.key:
+                settings.append({
+                    "key": setting.key.upper(),
+                    "value": setting.value
+                })
+
+                keys.add(setting.key.upper())
+
+        # Specify any "default" values which are not in the database
+        for key in cls.GLOBAL_SETTINGS.keys():
+
+            if key.upper() not in keys:
+
+                settings.append({
+                    "key": key.upper(),
+                    "value": cls.get_setting_default(key)
+                })
+        
+        # Enforce javascript formatting
+        for idx, setting in enumerate(settings):
+
+            key = setting['key']
+            value = setting['value']
+
+            validator = cls.get_setting_validator(key)
+
+            # Convert to javascript compatible booleans
+            if cls.validator_is_bool(validator):
+                value = str(value).lower()
+
+            # Numerical values remain the same
+            elif cls.validator_is_int(validator):
+                pass
+
+            # Wrap strings with quotes
+            else:
+                value = format_html("'{}'", value)
+
+            setting["value"] = value
+
+        return settings
 
     @classmethod
     def get_setting_name(cls, key):
@@ -440,7 +205,11 @@ class InvenTreeSetting(models.Model):
         return choices
 
     @classmethod
-    def get_setting_object(cls, key):
+    def get_filters(cls, key, **kwargs):
+        return {'key__iexact': key}
+
+    @classmethod
+    def get_setting_object(cls, key, **kwargs):
         """
         Return an InvenTreeSetting object matching the given key.
 
@@ -451,8 +220,8 @@ class InvenTreeSetting(models.Model):
         key = str(key).strip().upper()
 
         try:
-            setting = InvenTreeSetting.objects.filter(key__iexact=key).first()
-        except (ValueError, InvenTreeSetting.DoesNotExist):
+            setting = cls.objects.filter(**cls.get_filters(key, **kwargs)).first()
+        except (ValueError, cls.DoesNotExist):
             setting = None
         except (IntegrityError, OperationalError):
             setting = None
@@ -460,7 +229,7 @@ class InvenTreeSetting(models.Model):
         # Setting does not exist! (Try to create it)
         if not setting:
 
-            setting = InvenTreeSetting(key=key, value=InvenTreeSetting.get_setting_default(key))
+            setting = cls(key=key, value=cls.get_setting_default(key), **kwargs)
 
             try:
                 # Wrap this statement in "atomic", so it can be rolled back if it fails
@@ -480,7 +249,7 @@ class InvenTreeSetting(models.Model):
         If the setting does not exist, return None
         """
 
-        setting = InvenTreeSetting.get_setting_object(cls)
+        setting = cls.get_setting_object(cls)
 
         if setting:
             return setting.pk
@@ -488,7 +257,7 @@ class InvenTreeSetting(models.Model):
             return None
 
     @classmethod
-    def get_setting(cls, key, backup_value=None):
+    def get_setting(cls, key, backup_value=None, **kwargs):
         """
         Get the value of a particular setting.
         If it does not exist, return the backup value (default = None)
@@ -498,7 +267,7 @@ class InvenTreeSetting(models.Model):
         if backup_value is None:
             backup_value = cls.get_setting_default(key)
 
-        setting = InvenTreeSetting.get_setting_object(key)
+        setting = cls.get_setting_object(key, **kwargs)
 
         if setting:
             value = setting.value
@@ -519,7 +288,7 @@ class InvenTreeSetting(models.Model):
         return value
 
     @classmethod
-    def set_setting(cls, key, value, user, create=True):
+    def set_setting(cls, key, value, change_user, create=True, **kwargs):
         """
         Set the value of a particular setting.
         If it does not exist, option to create it.
@@ -527,19 +296,19 @@ class InvenTreeSetting(models.Model):
         Args:
             key: settings key
             value: New value
-            user: User object (must be staff member to update a core setting)
+            change_user: User object (must be staff member to update a core setting)
             create: If True, create a new setting if the specified key does not exist.
         """
 
-        if user is not None and not user.is_staff:
+        if change_user is not None and not change_user.is_staff:
             return
 
         try:
-            setting = InvenTreeSetting.objects.get(key__iexact=key)
-        except InvenTreeSetting.DoesNotExist:
+            setting = cls.objects.get(**cls.get_filters(key, **kwargs))
+        except cls.DoesNotExist:
 
             if create:
-                setting = InvenTreeSetting(key=key)
+                setting = cls(key=key, **kwargs)
             else:
                 return
 
@@ -550,25 +319,25 @@ class InvenTreeSetting(models.Model):
         setting.value = str(value)
         setting.save()
 
-    key = models.CharField(max_length=50, blank=False, unique=True, help_text=_('Settings key (must be unique - case insensitive'))
+    key = models.CharField(max_length=50, blank=False, unique=False, help_text=_('Settings key (must be unique - case insensitive'))
 
     value = models.CharField(max_length=200, blank=True, unique=False, help_text=_('Settings value'))
 
     @property
     def name(self):
-        return InvenTreeSetting.get_setting_name(self.key)
+        return self.__class__.get_setting_name(self.key)
 
     @property
     def default_value(self):
-        return InvenTreeSetting.get_setting_default(self.key)
+        return self.__class__.get_setting_default(self.key)
 
     @property
     def description(self):
-        return InvenTreeSetting.get_setting_description(self.key)
+        return self.__class__.get_setting_description(self.key)
 
     @property
     def units(self):
-        return InvenTreeSetting.get_setting_units(self.key)
+        return self.__class__.get_setting_units(self.key)
 
     def clean(self):
         """
@@ -578,7 +347,7 @@ class InvenTreeSetting(models.Model):
 
         super().clean()
 
-        validator = InvenTreeSetting.get_setting_validator(self.key)
+        validator = self.__class__.get_setting_validator(self.key)
 
         if self.is_bool():
             self.value = InvenTree.helpers.str2bool(self.value)
@@ -633,7 +402,7 @@ class InvenTreeSetting(models.Model):
             # We can accept function validators with a single argument
             validator(self.value)
 
-    def validate_unique(self, exclude=None):
+    def validate_unique(self, exclude=None, **kwargs):
         """ Ensure that the key:value pair is unique.
         In addition to the base validators, this ensures that the 'key'
         is unique, using a case-insensitive comparison.
@@ -642,10 +411,10 @@ class InvenTreeSetting(models.Model):
         super().validate_unique(exclude)
 
         try:
-            setting = InvenTreeSetting.objects.exclude(id=self.id).filter(key__iexact=self.key)
+            setting = self.__class__.objects.exclude(id=self.id).filter(**self.get_filters(self.key, **kwargs))
             if setting.exists():
                 raise ValidationError({'key': _('Key string must be unique')})
-        except InvenTreeSetting.DoesNotExist:
+        except self.DoesNotExist:
             pass
 
     def choices(self):
@@ -653,22 +422,16 @@ class InvenTreeSetting(models.Model):
         Return the available choices for this setting (or None if no choices are defined)
         """
 
-        return InvenTreeSetting.get_setting_choices(self.key)
+        return self.__class__.get_setting_choices(self.key)
 
     def is_bool(self):
         """
         Check if this setting is required to be a boolean value
         """
 
-        validator = InvenTreeSetting.get_setting_validator(self.key)
+        validator = self.__class__.get_setting_validator(self.key)
 
-        if validator == bool:
-            return True
-
-        if type(validator) in [list, tuple]:
-            for v in validator:
-                if v == bool:
-                    return True
+        return self.__class__.validator_is_bool(validator)
 
     def as_bool(self):
         """
@@ -679,12 +442,30 @@ class InvenTreeSetting(models.Model):
 
         return InvenTree.helpers.str2bool(self.value)
 
+    @classmethod
+    def validator_is_bool(cls, validator):
+
+        if validator == bool:
+            return True
+
+        if type(validator) in [list, tuple]:
+            for v in validator:
+                if v == bool:
+                    return True
+
+        return False
+
     def is_int(self):
         """
         Check if the setting is required to be an integer value:
         """
 
-        validator = InvenTreeSetting.get_setting_validator(self.key)
+        validator = self.__class__.get_setting_validator(self.key)
+
+        return self.__class__.validator_is_int(validator)
+
+    @classmethod
+    def validator_is_int(cls, validator):
 
         if validator == int:
             return True
@@ -711,6 +492,482 @@ class InvenTreeSetting(models.Model):
         return value
 
 
+class InvenTreeSetting(BaseInvenTreeSetting):
+    """
+    An InvenTreeSetting object is a key:value pair used for storing
+    single values (e.g. one-off settings values).
+
+    The class provides a way of retrieving the value for a particular key,
+    even if that key does not exist.
+    """
+
+    """
+    Dict of all global settings values:
+
+    The key of each item is the name of the value as it appears in the database.
+
+    Each global setting has the following parameters:
+
+    - name: Translatable string name of the setting (required)
+    - description: Translatable string description of the setting (required)
+    - default: Default value (optional)
+    - units: Units of the particular setting (optional)
+    - validator: Validation function for the setting (optional)
+
+    The keys must be upper-case
+    """
+
+    GLOBAL_SETTINGS = {
+
+        'INVENTREE_INSTANCE': {
+            'name': _('InvenTree Instance Name'),
+            'default': 'InvenTree server',
+            'description': _('String descriptor for the server instance'),
+        },
+
+        'INVENTREE_INSTANCE_TITLE': {
+            'name': _('Use instance name'),
+            'description': _('Use the instance name in the title-bar'),
+            'validator': bool,
+            'default': False,
+        },
+
+        'INVENTREE_COMPANY_NAME': {
+            'name': _('Company name'),
+            'description': _('Internal company name'),
+            'default': 'My company name',
+        },
+
+        'INVENTREE_BASE_URL': {
+            'name': _('Base URL'),
+            'description': _('Base URL for server instance'),
+            'validator': URLValidator(),
+            'default': '',
+        },
+
+        'INVENTREE_DEFAULT_CURRENCY': {
+            'name': _('Default Currency'),
+            'description': _('Default currency'),
+            'default': 'USD',
+            'choices': CURRENCY_CHOICES,
+        },
+
+        'INVENTREE_DOWNLOAD_FROM_URL': {
+            'name': _('Download from URL'),
+            'description': _('Allow download of remote images and files from external URL'),
+            'validator': bool,
+            'default': False,
+        },
+
+        'BARCODE_ENABLE': {
+            'name': _('Barcode Support'),
+            'description': _('Enable barcode scanner support'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_IPN_REGEX': {
+            'name': _('IPN Regex'),
+            'description': _('Regular expression pattern for matching Part IPN')
+        },
+
+        'PART_ALLOW_DUPLICATE_IPN': {
+            'name': _('Allow Duplicate IPN'),
+            'description': _('Allow multiple parts to share the same IPN'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_ALLOW_EDIT_IPN': {
+            'name': _('Allow Editing IPN'),
+            'description': _('Allow changing the IPN value while editing a part'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_COPY_BOM': {
+            'name': _('Copy Part BOM Data'),
+            'description': _('Copy BOM data by default when duplicating a part'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_COPY_PARAMETERS': {
+            'name': _('Copy Part Parameter Data'),
+            'description': _('Copy parameter data by default when duplicating a part'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_COPY_TESTS': {
+            'name': _('Copy Part Test Data'),
+            'description': _('Copy test data by default when duplicating a part'),
+            'default': True,
+            'validator': bool
+        },
+
+        'PART_CATEGORY_PARAMETERS': {
+            'name': _('Copy Category Parameter Templates'),
+            'description': _('Copy category parameter templates when creating a part'),
+            'default': True,
+            'validator': bool
+        },
+
+        'PART_TEMPLATE': {
+            'name': _('Template'),
+            'description': _('Parts are templates by default'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'PART_ASSEMBLY': {
+            'name': _('Assembly'),
+            'description': _('Parts can be assembled from other components by default'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'PART_COMPONENT': {
+            'name': _('Component'),
+            'description': _('Parts can be used as sub-components by default'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_PURCHASEABLE': {
+            'name': _('Purchaseable'),
+            'description': _('Parts are purchaseable by default'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_SALABLE': {
+            'name': _('Salable'),
+            'description': _('Parts are salable by default'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'PART_TRACKABLE': {
+            'name': _('Trackable'),
+            'description': _('Parts are trackable by default'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'PART_VIRTUAL': {
+            'name': _('Virtual'),
+            'description': _('Parts are virtual by default'),
+            'default': False,
+            'validator': bool,
+        },
+
+        # TODO: Remove this setting in future, new API forms make this not useful
+        'PART_SHOW_QUANTITY_IN_FORMS': {
+            'name': _('Show Quantity in Forms'),
+            'description': _('Display available part quantity in some forms'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_SHOW_IMPORT': {
+            'name': _('Show Import in Views'),
+            'description': _('Display the import wizard in some part views'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'PART_SHOW_PRICE_IN_FORMS': {
+            'name': _('Show Price in Forms'),
+            'description': _('Display part price in some forms'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_SHOW_RELATED': {
+            'name': _('Show related parts'),
+            'description': _('Display related parts for a part'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'PART_CREATE_INITIAL': {
+            'name': _('Create initial stock'),
+            'description': _('Create initial stock on part creation'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'PART_INTERNAL_PRICE': {
+            'name': _('Internal Prices'),
+            'description': _('Enable internal prices for parts'),
+            'default': False,
+            'validator': bool
+        },
+
+        'PART_BOM_USE_INTERNAL_PRICE': {
+            'name': _('Internal Price as BOM-Price'),
+            'description': _('Use the internal price (if set) in BOM-price calculations'),
+            'default': False,
+            'validator': bool
+        },
+
+        'REPORT_DEBUG_MODE': {
+            'name': _('Debug Mode'),
+            'description': _('Generate reports in debug mode (HTML output)'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'REPORT_DEFAULT_PAGE_SIZE': {
+            'name': _('Page Size'),
+            'description': _('Default page size for PDF reports'),
+            'default': 'A4',
+            'choices': [
+                ('A4', 'A4'),
+                ('Legal', 'Legal'),
+                ('Letter', 'Letter')
+            ],
+        },
+
+        'REPORT_ENABLE_TEST_REPORT': {
+            'name': _('Test Reports'),
+            'description': _('Enable generation of test reports'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'STOCK_ENABLE_EXPIRY': {
+            'name': _('Stock Expiry'),
+            'description': _('Enable stock expiry functionality'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'STOCK_ALLOW_EXPIRED_SALE': {
+            'name': _('Sell Expired Stock'),
+            'description': _('Allow sale of expired stock'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'STOCK_STALE_DAYS': {
+            'name': _('Stock Stale Time'),
+            'description': _('Number of days stock items are considered stale before expiring'),
+            'default': 0,
+            'units': _('days'),
+            'validator': [int],
+        },
+
+        'STOCK_ALLOW_EXPIRED_BUILD': {
+            'name': _('Build Expired Stock'),
+            'description': _('Allow building with expired stock'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'STOCK_OWNERSHIP_CONTROL': {
+            'name': _('Stock Ownership Control'),
+            'description': _('Enable ownership control over stock locations and items'),
+            'default': False,
+            'validator': bool,
+        },
+
+        'STOCK_GROUP_BY_PART': {
+            'name': _('Group by Part'),
+            'description': _('Group stock items by part reference in table views'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'BUILDORDER_REFERENCE_PREFIX': {
+            'name': _('Build Order Reference Prefix'),
+            'description': _('Prefix value for build order reference'),
+            'default': 'BO',
+        },
+
+        'BUILDORDER_REFERENCE_REGEX': {
+            'name': _('Build Order Reference Regex'),
+            'description': _('Regular expression pattern for matching build order reference')
+        },
+
+        'SALESORDER_REFERENCE_PREFIX': {
+            'name': _('Sales Order Reference Prefix'),
+            'description': _('Prefix value for sales order reference'),
+            'default': 'SO',
+        },
+
+        'PURCHASEORDER_REFERENCE_PREFIX': {
+            'name': _('Purchase Order Reference Prefix'),
+            'description': _('Prefix value for purchase order reference'),
+            'default': 'PO',
+        },
+    }
+
+    class Meta:
+        verbose_name = "InvenTree Setting"
+        verbose_name_plural = "InvenTree Settings"
+
+    key = models.CharField(
+        max_length=50,
+        blank=False,
+        unique=True,
+        help_text=_('Settings key (must be unique - case insensitive'),
+    )
+
+
+class InvenTreeUserSetting(BaseInvenTreeSetting):
+    """
+    An InvenTreeSetting object with a usercontext
+    """
+
+    GLOBAL_SETTINGS = {
+        'HOMEPAGE_PART_STARRED': {
+            'name': _('Show starred parts'),
+            'description': _('Show starred parts on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_PART_LATEST': {
+            'name': _('Show latest parts'),
+            'description': _('Show latest parts on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'PART_RECENT_COUNT': {
+            'name': _('Recent Part Count'),
+            'description': _('Number of recent parts to display on index page'),
+            'default': 10,
+            'validator': [int, MinValueValidator(1)]
+        },
+
+        'HOMEPAGE_BOM_VALIDATION': {
+            'name': _('Show unvalidated BOMs'),
+            'description': _('Show BOMs that await validation on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_STOCK_RECENT': {
+            'name': _('Show recent stock changes'),
+            'description': _('Show recently changed stock items on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'STOCK_RECENT_COUNT': {
+            'name': _('Recent Stock Count'),
+            'description': _('Number of recent stock items to display on index page'),
+            'default': 10,
+            'validator': [int, MinValueValidator(1)]
+        },
+        'HOMEPAGE_STOCK_LOW': {
+            'name': _('Show low stock'),
+            'description': _('Show low stock items on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_STOCK_DEPLETED': {
+            'name': _('Show depleted stock'),
+            'description': _('Show depleted stock items on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_STOCK_NEEDED': {
+            'name': _('Show needed stock'),
+            'description': _('Show stock items needed for builds on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_STOCK_EXPIRED': {
+            'name': _('Show expired stock'),
+            'description': _('Show expired stock items on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_STOCK_STALE': {
+            'name': _('Show stale stock'),
+            'description': _('Show stale stock items on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_BUILD_PENDING': {
+            'name': _('Show pending builds'),
+            'description': _('Show pending builds on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_BUILD_OVERDUE': {
+            'name': _('Show overdue builds'),
+            'description': _('Show overdue builds on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_PO_OUTSTANDING': {
+            'name': _('Show outstanding POs'),
+            'description': _('Show outstanding POs on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_PO_OVERDUE': {
+            'name': _('Show overdue POs'),
+            'description': _('Show overdue POs on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_SO_OUTSTANDING': {
+            'name': _('Show outstanding SOs'),
+            'description': _('Show outstanding SOs on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+        'HOMEPAGE_SO_OVERDUE': {
+            'name': _('Show overdue SOs'),
+            'description': _('Show overdue SOs on the homepage'),
+            'default': True,
+            'validator': bool,
+        },
+
+        'SEARCH_PREVIEW_RESULTS': {
+            'name': _('Search Preview Results'),
+            'description': _('Number of results to show in search preview window'),
+            'default': 10,
+            'validator': [int, MinValueValidator(1)]
+        },
+    }
+
+    class Meta:
+        verbose_name = "InvenTree User Setting"
+        verbose_name_plural = "InvenTree User Settings"
+        constraints = [
+            models.UniqueConstraint(fields=['key', 'user'], name='unique key and user')
+        ]
+
+    key = models.CharField(
+        max_length=50,
+        blank=False,
+        unique=False,
+        help_text=_('Settings key (must be unique - case insensitive'),
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        blank=True, null=True,
+        verbose_name=_('User'),
+        help_text=_('User'),
+    )
+
+    @classmethod
+    def get_setting_object(cls, key, user):
+        return super().get_setting_object(key, user=user)
+
+    def validate_unique(self, exclude=None):
+        return super().validate_unique(exclude=exclude, user=self.user)
+
+    @classmethod
+    def get_filters(cls, key, **kwargs):
+        return {'key__iexact': key, 'user__id': kwargs['user'].id}
+
+
 class PriceBreak(models.Model):
     """
     Represents a PriceBreak model
@@ -728,10 +985,9 @@ class PriceBreak(models.Model):
         help_text=_('Price break quantity'),
     )
 
-    price = MoneyField(
+    price = InvenTree.fields.InvenTreeModelMoneyField(
         max_digits=19,
         decimal_places=4,
-        default_currency=currency_code_default(),
         null=True,
         verbose_name=_('Price'),
         help_text=_('Unit price at specified quantity'),
@@ -761,6 +1017,7 @@ def get_price(instance, quantity, moq=True, multiples=True, currency=None, break
     - If MOQ (minimum order quantity) is required, bump quantity
     - If order multiples are to be observed, then we need to calculate based on that, too
     """
+    from common.settings import currency_code_default
 
     if hasattr(instance, break_name):
         price_breaks = getattr(instance, break_name).all()
